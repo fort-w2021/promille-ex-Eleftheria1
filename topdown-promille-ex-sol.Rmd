@@ -1,0 +1,76 @@
+## Stößchen!
+
+
+Die Seite [`promille-rechner.org`](https://web.archive.org/web/20150123143123/http://promille-rechner.org/erlaeuterung-der-promille-berechnung/)\footnote{Obacht, Link geht zum Internet-Archiv "Wayback Machine", das kann bisschen dauern...} bietet eine schöne Erklärung wie man nach dem sog. *Watson-Algorithmus* Blutalkoholkonzentrationen grob abschätzen kann. Benutzen Sie die dort beschriebene Methode (genauer: die Formel "Kombination Widmark und Whatson") um eine Funktion
+```{r, eval=FALSE}
+# Function calculates quantity of alcohol in grams. Checks if person is old enough
+quantify_alc <- function(drinks, age) {
+  # gram per drink of massn hoibe wein schnaps
+  grams <- c(1000 * 0.06 * 0.8, 500 * 0.06 * 0.8, 200 * 0.11 * 0.8, 40 * 0.4 * 0.8)
+  drinks_vec <- unlist(drinks)
+  # sum up duplicates wrt names
+  drinks_vec <- vapply(unique(names(drinks_vec)), function(name) {
+    sum(drinks_vec[names(drinks_vec) == name])
+  }, FUN.VALUE = numeric(1))
+  # get the frequencies ordered
+  freq_vec <- c("massn" = 0, "hoibe" = 0, "wein" = 0, "schnaps" = 0)
+  freq_vec[names(drinks_vec)] <- drinks_vec
+  if (age < 16 & any(freq_vec > 0)) {
+    warning("illegal")
+  } else if (age < 18 & freq_vec[4] > 0) {
+    warning("illegal")
+  }
+  sum(grams * freq_vec)
+}
+
+# function calculates the amount of water
+calc_water <- function(age, sex, height, weight) {
+  switch(sex,
+    male = 2.447 - 0.09516 * age + 0.1074 * height + 0.3362 * weight,
+    female = 0.203 - 0.07 * age + 0.1069 * height + 0.2466 * weight
+  )
+}
+
+# main function to tell you how drunk you are
+tell_me_how_drunk <- function(age, sex = c("male", "female"), height, weight, drinking_time, drinks) {
+  sex <- tolower(sex)
+  sex <- match.arg(sex)
+  checkmate::assert_integerish(age, lower = 0, upper = 100, len = 1, any.missing = FALSE)
+  checkmate::assert_choice(sex, c("male", "female"))
+  checkmate::assert_numeric(height, len = 1, finite = TRUE, any.missing = FALSE, lower = 0)
+  checkmate::assert_numeric(weight, len = 1, finite = TRUE, any.missing = FALSE, lower = 0)
+  checkmate::assert_posixct(drinking_time, any.missing = FALSE, len = 2, sorted = TRUE)
+  checkmate::assert(
+    checkmate::check_integerish(drinks, any.missing = FALSE, min.len = 1, max.len = 4, lower = 0, names = "named"),
+    checkmate::check_list(drinks, any.missing = FALSE, min.len = 1, max.len = 4)
+  )
+  checkmate::assert_names(names(unlist(drinks)), subset.of = c("massn", "hoibe", "wein", "schnaps"))
+  if (any(!sapply(drinks, function(x) {
+    length(x) == 1 && all(x >= 0)
+  }))) {
+    stop("drinks must be a list with named single positive integer values as elements!")
+  }
+
+  quantity_alc <- quantify_alc(drinks, age)
+  dens_blood <- 1.055
+  water <- calc_water(age, sex, height, weight)
+  alc_conc <- (0.8 * quantity_alc) / (dens_blood * water)
+  time_int <- lubridate::interval(drinking_time[1], drinking_time[2])
+  alc_final <- alc_conc - ((lubridate::int_length(time_int) / (60 * 60) - 1) * 0.15)
+  max(0, alc_final)
+}
+```
+zu schreiben, die für gegebene Eigenschaften einer Person, den von ihr konsumierten Getränken (Art & Anzahl) `drinks`  und der Zeitspanne (Anfang/Ende) `drinking_time` in der getrunken wurde die Blutalkoholkonzentration (in Promille) zum Ende der `drinking_time` berechnet.
+
+Spezifikation:
+
+- Ihre Funktion muß die Getränkearten "massn", "hoibe", "wein" und "schnaps" kennen. Für Bier nehmen Sie bitte oktoberfestmäßige 6% an, für Wein 11% und 0.2l pro Portion und für Schnaps 40% und 4cl pro Portion. 
+- `drinks` kann als Liste (zB `list("massn" = 2, "schnaps" = 3)`) oder als Vektor übergeben werden (zB `c("wein" = 4, "hoibe" = 1)`). Ihre Funktion sollte beides akzeptieren.
+- `height` wird in cm angeben, `weight` in kg.
+- `drinking_time` bekommt einen Vektor von `POSIXct`-Zeitvariablen.
+
+Lösen Sie die Aufgabe im Top-Down-Stil den Sie in der Vorlesung kennengelernt haben.  
+
+Überprüfen Sie Ihre Funktion (mindestens) mit den Tests in `topdown-promille-tests.R`.
+
+Die Aufrufe in `topdown-promille-errors.R`  sollten jeweils einigermassen aussagekräftige Fehlermeldungen produzieren. Ihre Funktionen sollten also gutes *input checking* machen, benutzen Sie dafür bitte die `assert_<BLA>()`-Funktionen aus dem Paket `checkmate`. 
